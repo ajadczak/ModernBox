@@ -13,6 +13,9 @@
 //#include "d3dx11Effect.h"
 #include "MathHelper.h"
 #include "DirectXColors.h"
+#include "cbPerObject.h"
+#include "ConstantBuffer.h"
+#include "ShaderHelper.h"
 using namespace DirectX;
 
 struct Vertex
@@ -40,16 +43,18 @@ private:
 	void BuildGeometryBuffers();
 	void BuildFX();
 	void BuildVertexLayout();
+	void BuildRasterState();
 
 private:
+	ConstantBuffer<cbPerObject> objectcBuffer;
 	ID3D11Buffer* mBoxVB;
 	ID3D11Buffer* mBoxIB;
-
-	//ID3DX11Effect* mFX;
-	//ID3DX11EffectTechnique* mTech;
-	//ID3DX11EffectMatrixVariable* mfxWorldViewProj;
-
+	ID3DBlob* mPSBlob;
+	ID3DBlob* mVSBlob;
+	ID3D11PixelShader* mPixelShader;
+	ID3D11VertexShader* mVertexShader;
 	ID3D11InputLayout* mInputLayout;
+	ID3D11RasterizerState* mRasterState;
 
 	XMFLOAT4X4 mWorld;
 	XMFLOAT4X4 mView;
@@ -80,10 +85,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
  
 
 BoxApp::BoxApp(HINSTANCE hInstance)
-: D3DApp(hInstance), mBoxVB(0), mBoxIB(0), 
-//mFX(0), mTech(0), mfxWorldViewProj(0), 
-  mInputLayout(0), 
-  mTheta(1.5f*MathHelper::Pi), mPhi(0.25f*MathHelper::Pi), mRadius(5.0f)
+: D3DApp(hInstance), mBoxVB(0), mBoxIB(0), mInputLayout(0), 
+mTheta(1.5f*MathHelper::Pi), mPhi(0.25f*MathHelper::Pi), mRadius(5.0f)
 {
 	mMainWndCaption = L"Box Demo";
 	
@@ -100,8 +103,9 @@ BoxApp::~BoxApp()
 {
 	ReleaseCOM(mBoxVB);
 	ReleaseCOM(mBoxIB);
-	//ReleaseCOM(mFX);
 	ReleaseCOM(mInputLayout);
+	ReleaseCOM(mPSBlob);
+	ReleaseCOM(mVSBlob);
 }
 
 bool BoxApp::Init()
@@ -112,6 +116,8 @@ bool BoxApp::Init()
 	BuildGeometryBuffers();
 	BuildFX();
 	BuildVertexLayout();
+	BuildRasterState();
+	objectcBuffer.Initialize(md3dDevice);
 
 	return true;
 }
@@ -143,11 +149,17 @@ void BoxApp::UpdateScene(float dt)
 
 void BoxApp::DrawScene()
 {
+	md3dImmediateContext->IASetInputLayout(mInputLayout);
+	md3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
 	md3dImmediateContext->ClearRenderTargetView(mRenderTargetView, reinterpret_cast<const float*>(&Colors::LightSteelBlue));
 	md3dImmediateContext->ClearDepthStencilView(mDepthStencilView, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
-
-	md3dImmediateContext->IASetInputLayout(mInputLayout);
-    md3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	
+	// Set vertex and pixel shaders
+	md3dImmediateContext->PSSetShader(mPixelShader, NULL, 0);
+	md3dImmediateContext->VSSetShader(mVertexShader, NULL, 0);
+	auto buffer = objectcBuffer.Buffer();
+	md3dImmediateContext->VSSetConstantBuffers(0, 1, &buffer);
 
 	UINT stride = sizeof(Vertex);
     UINT offset = 0;
@@ -158,21 +170,19 @@ void BoxApp::DrawScene()
 	XMMATRIX world = XMLoadFloat4x4(&mWorld);
 	XMMATRIX view  = XMLoadFloat4x4(&mView);
 	XMMATRIX proj  = XMLoadFloat4x4(&mProj);
-	XMMATRIX worldViewProj = world*view*proj;
+	XMMATRIX worldViewProj = XMMatrixTranspose(world*view*proj);
 
 	// Use a constant buffer. Effect framework deprecated
-	//mfxWorldViewProj->SetMatrix(reinterpret_cast<float*>(&worldViewProj));
-
-    //D3DX11_TECHNIQUE_DESC techDesc;
-    //mTech->GetDesc( &techDesc );
-    //for(UINT p = 0; p < techDesc.Passes; ++p)
-    //{
-        //mTech->GetPassByIndex(p)->Apply(0, md3dImmediateContext);
-        
-		// 36 indices for the box.
-		//md3dImmediateContext->DrawIndexed(36, 0, 0);
-    //}
-
+	cbPerObject mPerObjectCB;
+	XMStoreFloat4x4(&mPerObjectCB.mWorldViewProj, worldViewProj);
+	objectcBuffer.Data = mPerObjectCB;
+	objectcBuffer.ApplyChanges(md3dImmediateContext);
+	
+	// Set raster state
+	md3dImmediateContext->RSSetState(mRasterState);	
+	
+	// Draw
+	md3dImmediateContext->DrawIndexed(36, 0, 0);
 	HR(mSwapChain->Present(0, 0));
 }
 
@@ -295,36 +305,13 @@ void BoxApp::BuildFX()
     shaderFlags |= D3D10_SHADER_DEBUG;
 	shaderFlags |= D3D10_SHADER_SKIP_OPTIMIZATION;
 #endif
- 
-
-	// Rewrite shaders, load cso files
-
-	/*ID3D10Blob* compiledShader = 0;
-	ID3D10Blob* compilationMsgs = 0;
-	HRESULT hr = D3DX11CompileFromFile(L"FX/color.fx", 0, 0, 0, "fx_5_0", shaderFlags, 
-		0, 0, &compiledShader, &compilationMsgs, 0);*/
-
-	// compilationMsgs can store errors or warnings.
-	/*if( compilationMsgs != 0 )
-	{
-		MessageBoxA(0, (char*)compilationMsgs->GetBufferPointer(), 0, 0);
-		ReleaseCOM(compilationMsgs);
-	}*/
-
-	// Even if there are no compilationMsgs, check to make sure there were no other errors.
-	/*if(FAILED(hr))
-	{
-		DXTrace(__FILE__, (DWORD)__LINE__, hr, L"D3DX11CompileFromFile", true);
-	}*/
-
-	//HR(D3DX11CreateEffectFromMemory(compiledShader->GetBufferPointer(), compiledShader->GetBufferSize(), 
-	//	0, md3dDevice, &mFX));
-
-	//// Done with compiled shader.
-	//ReleaseCOM(compiledShader);
-
-	//mTech    = mFX->GetTechniqueByName("ColorTech");
-	//mfxWorldViewProj = mFX->GetVariableByName("gWorldViewProj")->AsMatrix();
+	
+	// Load cso files and create shaders
+	HR(ShaderHelper::LoadCompiledShader("SimplePixelShader.cso", &mPSBlob));
+	HR(md3dDevice->CreatePixelShader(mPSBlob->GetBufferPointer(), mPSBlob->GetBufferSize(), NULL, &mPixelShader));
+	
+	HR(ShaderHelper::LoadCompiledShader("SimpleVertexShader.cso", &mVSBlob));
+	HR(md3dDevice->CreateVertexShader(mVSBlob->GetBufferPointer(), mVSBlob->GetBufferSize(), NULL, &mVertexShader));
 }
 
 void BoxApp::BuildVertexLayout()
@@ -336,10 +323,16 @@ void BoxApp::BuildVertexLayout()
 		{"COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0}
 	};
 
-	// Create the input layout
-    //D3DX11_PASS_DESC passDesc;
-    //mTech->GetPassByIndex(0)->GetDesc(&passDesc);
-	/*HR(md3dDevice->CreateInputLayout(vertexDesc, 2, passDesc.pIAInputSignature, 
-		passDesc.IAInputSignatureSize, &mInputLayout));*/
+	HR(md3dDevice->CreateInputLayout(vertexDesc, 2, mVSBlob->GetBufferPointer(), mVSBlob->GetBufferSize(), &mInputLayout));
 }
  
+void BoxApp::BuildRasterState()
+{
+	D3D11_RASTERIZER_DESC rs;
+	memset(&rs, 0, sizeof(rs));
+	rs.FillMode = D3D11_FILL_SOLID;
+	rs.CullMode = D3D11_CULL_NONE; //D3D11_CULL_BACK;
+	rs.AntialiasedLineEnable = rs.DepthClipEnable = true;
+	mRasterState = NULL;
+	HR(md3dDevice->CreateRasterizerState(&rs, &mRasterState));
+}

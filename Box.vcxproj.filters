@@ -22,6 +22,9 @@
     <Filter Include="Common">
       <UniqueIdentifier>{4539ed79-bcd2-4c91-b616-fb8f2e21bba7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\ConstantBuffers">
+      <UniqueIdentifier>{45716bf8-ee59-43af-9a83-528f083ea4fe}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="BoxDemo.cpp">
@@ -38,6 +41,9 @@
     </ClCompile>
     <ClCompile Include="MathHelper.cpp">
       <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="ShaderHelper.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -63,6 +69,15 @@
     </ClInclude>
     <ClInclude Include="MathHelper.h">
       <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="cbPerObject.h">
+      <Filter>Header Files\ConstantBuffers</Filter>
+    </ClInclude>
+    <ClInclude Include="ConstantBuffer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ShaderHelper.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
