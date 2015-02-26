@@ -10,7 +10,6 @@
 //***************************************************************************************
 
 #include "d3dApp.h"
-//#include "d3dx11Effect.h"
 #include "MathHelper.h"
 #include "DirectXColors.h"
 #include "cbPerObject.h"
@@ -46,7 +45,7 @@ private:
 	void BuildRasterState();
 
 private:
-	ConstantBuffer<cbPerObject> objectcBuffer;
+	ConstantBuffer<cbPerObject> mObjectConstantBuffer;
 	ID3D11Buffer* mBoxVB;
 	ID3D11Buffer* mBoxIB;
 	ID3DBlob* mPSBlob;
@@ -117,7 +116,7 @@ bool BoxApp::Init()
 	BuildFX();
 	BuildVertexLayout();
 	BuildRasterState();
-	objectcBuffer.Initialize(md3dDevice);
+	mObjectConstantBuffer.Initialize(md3dDevice);
 
 	return true;
 }
@@ -158,8 +157,6 @@ void BoxApp::DrawScene()
 	// Set vertex and pixel shaders
 	md3dImmediateContext->PSSetShader(mPixelShader, NULL, 0);
 	md3dImmediateContext->VSSetShader(mVertexShader, NULL, 0);
-	auto buffer = objectcBuffer.Buffer();
-	md3dImmediateContext->VSSetConstantBuffers(0, 1, &buffer);
 
 	UINT stride = sizeof(Vertex);
     UINT offset = 0;
@@ -175,8 +172,11 @@ void BoxApp::DrawScene()
 	// Use a constant buffer. Effect framework deprecated
 	cbPerObject mPerObjectCB;
 	XMStoreFloat4x4(&mPerObjectCB.mWorldViewProj, worldViewProj);
-	objectcBuffer.Data = mPerObjectCB;
-	objectcBuffer.ApplyChanges(md3dImmediateContext);
+	mObjectConstantBuffer.Data = mPerObjectCB;
+	mObjectConstantBuffer.ApplyChanges(md3dImmediateContext);
+
+	auto buffer = mObjectConstantBuffer.Buffer();
+	md3dImmediateContext->VSSetConstantBuffers(0, 1, &buffer);
 	
 	// Set raster state
 	md3dImmediateContext->RSSetState(mRasterState);	
@@ -331,7 +331,7 @@ void BoxApp::BuildRasterState()
 	D3D11_RASTERIZER_DESC rs;
 	memset(&rs, 0, sizeof(rs));
 	rs.FillMode = D3D11_FILL_SOLID;
-	rs.CullMode = D3D11_CULL_NONE; //D3D11_CULL_BACK;
+	rs.CullMode = D3D11_CULL_BACK;
 	rs.AntialiasedLineEnable = rs.DepthClipEnable = true;
 	mRasterState = NULL;
 	HR(md3dDevice->CreateRasterizerState(&rs, &mRasterState));

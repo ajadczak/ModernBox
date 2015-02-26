@@ -11,6 +11,5 @@ struct VertexOut
 
 float4 main(VertexOut vin) : SV_TARGET
 {
-	return float4(0.5f, 0.2f, 0.7f, 0.1f);
-	//return vin.Color;
+	return vin.Color;
 }
